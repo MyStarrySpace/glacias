@@ -174,19 +174,21 @@ void main() {
     return;
   }
 
-  // ── Distortion mask ──
+  // ── Edge band (for Fresnel glow & specular) ──
   float bandWidth = radiusPx * u_thickness;
   float edgeBand = smoothstep(-bandWidth, 0.0, d) * (1.0 - smoothstep(0.0, 3.0, d));
 
-  float depth = clamp(-d / radiusPx, 0.0, 1.0);
+  // ── Radial distortion mask (strong at edges, zero at center) ──
+  float depth = clamp(-d / radiusPx, 0.0, 1.0);   // 0 at edge, 1 deep inside
+  float edgeProximity = 1.0 - depth;                // 1 at edge, 0 at center
+  float falloffExp = mix(3.0, 1.0, u_interior);     // u_interior widens the band
+  float radialFalloff = pow(edgeProximity, falloffExp);
   float inside = 1.0 - smoothstep(-1.0, 2.0, d);
+  float distortMask = radialFalloff * inside;
 
-  float distortMask = mix(inside * u_interior, 1.0, edgeBand);
-
-  // ── Surface normal ──
-  vec2 radialDir = (length(delta) > 0.5) ? normalize(delta) : vec2(0.0);
+  // ── Surface normal → edge tangent (parallel to edge) ──
   vec2 surfNormal = sdfNormal(delta, radiusPx, u_shape);
-  vec2 normal = normalize(mix(surfNormal, radialDir, smoothstep(0.0, 0.3, depth)));
+  vec2 edgeTangent = vec2(-surfNormal.y, surfNormal.x);
 
   // ── Animated noise ──
   float t = u_time * 0.3;
@@ -197,7 +199,7 @@ void main() {
 
   // ── Combine distortion ──
   float refractStrength = u_refraction * radiusPx * 0.6;
-  vec2 distortion = (normal * refractStrength * distortMask + noiseOffset * distortMask) / u_resolution;
+  vec2 distortion = (edgeTangent * refractStrength * distortMask + noiseOffset * distortMask) / u_resolution;
 
   // Chromatic aberration
   float chromaStrength = u_chromatic * 0.6;
@@ -219,7 +221,7 @@ void main() {
 
   // ── Specular highlight ──
   vec2 lightDir = normalize(vec2(0.3, -0.5));
-  float spec = pow(max(dot(normal, lightDir), 0.0), 12.0) * edgeBand;
+  float spec = pow(max(dot(surfNormal, lightDir), 0.0), 12.0) * edgeBand;
   color += vec3(1.0, 0.98, 0.95) * spec * u_edge * 0.25;
 
   // ── Inner shadow ──
