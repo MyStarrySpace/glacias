@@ -200,7 +200,7 @@ void main() {
   ) * u_noise * 40.0 / u_resolution;
 
   // ── Combine distortion ──
-  float refractStrength = u_refraction * radiusPx * 0.6;
+  float refractStrength = u_refraction * radiusPx * 2.0;
   vec2 distortion = (edgeTangent * refractStrength * distortMask + noiseOffset * distortMask) / u_resolution;
 
   // Chromatic aberration
@@ -216,6 +216,10 @@ void main() {
   float b = sampleBlur(u_bg, bUV, blurAmount).b;
 
   vec3 color = vec3(r, g, b);
+
+  // ── DEBUG: red edge glow ──
+  float debugBand = smoothstep(-radiusPx * 0.05, 0.0, d) * (1.0 - smoothstep(0.0, 8.0, d));
+  color = mix(color, vec3(1.0, 0.0, 0.0), debugBand * 0.8);
 
   // ── Edge highlight (Fresnel glow) ──
   float glowBand = smoothstep(-radiusPx * 0.12, 0.0, d) * (1.0 - smoothstep(0.0, 5.0, d));
