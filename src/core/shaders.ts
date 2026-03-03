@@ -224,7 +224,8 @@ void main() {
   ) * u_noise * 40.0 / u_resolution;
 
   // ── Combine distortion ──
-  float refractStrength = u_refraction * radiusPx * 2.0;
+  // Max displacement in pixels: refraction 1.0 → 50px, independent of shape size
+  float refractStrength = u_refraction * 50.0;
   vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution;
   vec2 distortion = distortionPx / u_resolution;
 
