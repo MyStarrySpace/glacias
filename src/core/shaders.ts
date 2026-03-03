@@ -31,6 +31,8 @@ uniform sampler2D u_sdf_tex;  // custom SDF texture (0.5 = edge)
 uniform int u_use_sdf_tex;    // 0 = built-in SDF, 1 = texture SDF
 uniform float u_sdf_scale;    // converts texture value to pixel distance
 uniform int u_debug;          // 0 = off, 1 = vector field, 2 = SDF heatmap
+uniform vec3 u_fill_color;    // tint RGB (0–1)
+uniform float u_fill_opacity; // tint opacity (0 = none, 1 = solid)
 
 // ── Simplex-style noise (2D) ──
 vec3 mod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
@@ -368,6 +370,11 @@ void main() {
   // ── Inner shadow ──
   float innerShadow = smoothstep(0.0, radiusPx * 0.08, -d);
   color *= mix(0.88, 1.0, innerShadow);
+
+  // ── Fill tint ──
+  if (u_fill_opacity > 0.0) {
+    color = mix(color, u_fill_color, u_fill_opacity * inside);
+  }
 
   fragColor = vec4(color, 1.0);
 }`;

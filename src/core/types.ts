@@ -1,9 +1,10 @@
 export type ShapeType = "circle" | "roundedRect" | "hexagon" | "clover" | "star";
 
 export interface GlassParams {
-  shape: ShapeType;
-  /** Radius in CSS pixels (40–400) */
-  radius: number;
+  /** Built-in SDF shape (only used when no custom SDF texture is provided) */
+  shape?: ShapeType;
+  /** Radius in CSS pixels for built-in shapes (only used when no custom SDF texture) */
+  radius?: number;
   /** Refraction strength 0–1 */
   refraction: number;
   /** Chromatic aberration 0–1 */
@@ -14,15 +15,22 @@ export interface GlassParams {
   noise: number;
   /** Edge glow intensity 0–1 */
   edge: number;
-  /** Edge band width 0–1 */
-  thickness: number;
-  /** Interior distortion 0–1 */
+  /** Edge highlight band width 0–1 (fraction of radius for Fresnel/specular) */
+  thickness?: number;
+  /** Interior distortion breadth 0–1 (widens the active distortion band inward) */
   interior: number;
-  /** Center attenuation 0–1 (0 = uniform, 1 = edges only) */
+  /** Center attenuation 0–1 (0 = uniform distortion, 1 = edges only) */
   falloff: number;
+  /** Fill tint color as [r, g, b] in 0–1 range */
+  fillColor?: [number, number, number];
+  /** Fill tint opacity 0–1 (0 = no tint, 1 = solid fill) */
+  fillOpacity?: number;
   /** Debug visualization: 0 = off, 1 = vector field, 2 = SDF heatmap */
-  debug: number;
+  debug?: number;
 }
+
+/** Fully resolved params used internally (all fields present) */
+export type ResolvedGlassParams = Required<GlassParams>;
 
 export interface GlaciasOptions {
   canvas: HTMLCanvasElement;
@@ -40,7 +48,7 @@ export const SHAPE_INDEX: Record<ShapeType, number> = {
   star: 4,
 };
 
-export const DEFAULT_PARAMS: GlassParams = {
+export const DEFAULT_PARAMS: ResolvedGlassParams = {
   shape: "clover",
   radius: 180,
   refraction: 0.6,
@@ -51,5 +59,7 @@ export const DEFAULT_PARAMS: GlassParams = {
   thickness: 0.65,
   interior: 0.2,
   falloff: 1.0,
+  fillColor: [0, 0, 0],
+  fillOpacity: 0,
   debug: 0,
 };

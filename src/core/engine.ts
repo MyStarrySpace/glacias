@@ -1,4 +1,4 @@
-import { GlassParams, GlaciasOptions, DEFAULT_PARAMS, SHAPE_INDEX } from "./types";
+import { GlassParams, ResolvedGlassParams, GlaciasOptions, DEFAULT_PARAMS, SHAPE_INDEX } from "./types";
 import { VERT_SRC, FRAG_SRC } from "./shaders";
 import { generateProceduralBg } from "./procedural-bg";
 
@@ -22,6 +22,8 @@ const UNIFORM_NAMES = [
   "u_use_sdf_tex",
   "u_sdf_scale",
   "u_debug",
+  "u_fill_color",
+  "u_fill_opacity",
 ] as const;
 
 export class GlaciasEngine {
@@ -31,7 +33,7 @@ export class GlaciasEngine {
   private bgTexture: WebGLTexture;
   private quadBuffer: WebGLBuffer;
 
-  private params: GlassParams;
+  private params: ResolvedGlassParams;
   private bgRect: [number, number, number, number] = [0, 0, 1, 1];
   private containerEl: HTMLElement | null = null;
   private labelEl: HTMLElement | null = null;
@@ -245,6 +247,8 @@ export class GlaciasEngine {
     gl.uniform1f(loc.u_sdf_scale!, sdfScale);
     gl.uniform1i(loc.u_sdf_tex!, 1);
     gl.uniform1i(loc.u_debug!, params.debug);
+    gl.uniform3f(loc.u_fill_color!, params.fillColor[0], params.fillColor[1], params.fillColor[2]);
+    gl.uniform1f(loc.u_fill_opacity!, params.fillOpacity);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.bgTexture);
