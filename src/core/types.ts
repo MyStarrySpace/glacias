@@ -21,6 +21,8 @@ export interface GlassParams {
   interior: number;
   /** Center attenuation 0–1 (0 = uniform distortion, 1 = edges only) */
   falloff: number;
+  /** Overall displacement multiplier (default 1.0) */
+  strength?: number;
   /** Fill tint color as [r, g, b] in 0–1 range */
   fillColor?: [number, number, number];
   /** Fill tint opacity 0–1 (0 = no tint, 1 = solid fill) */
@@ -59,6 +61,7 @@ export const DEFAULT_PARAMS: ResolvedGlassParams = {
   thickness: 0.65,
   interior: 0.2,
   falloff: 1.0,
+  strength: 1.0,
   fillColor: [0, 0, 0],
   fillOpacity: 0,
   debug: 0,

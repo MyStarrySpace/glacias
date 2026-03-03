@@ -31,6 +31,7 @@ uniform sampler2D u_sdf_tex;  // custom SDF texture (0.5 = edge)
 uniform int u_use_sdf_tex;    // 0 = built-in SDF, 1 = texture SDF
 uniform float u_sdf_scale;    // converts texture value to pixel distance
 uniform int u_debug;          // 0 = off, 1 = vector field, 2 = SDF heatmap
+uniform float u_strength;     // overall displacement multiplier
 uniform vec3 u_fill_color;    // tint RGB (0–1)
 uniform float u_fill_opacity; // tint opacity (0 = none, 1 = solid)
 
@@ -226,9 +227,9 @@ void main() {
   ) * u_noise * 40.0 / u_resolution;
 
   // ── Combine distortion ──
-  // Max displacement in pixels: refraction 1.0 → 50px, independent of shape size
-  float refractStrength = u_refraction * 50.0;
-  vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution;
+  // Max displacement in pixels: refraction 1.0 → 50px, multiplied by strength
+  float refractStrength = u_refraction * 50.0 * u_strength;
+  vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution * u_strength;
   vec2 distortion = distortionPx / u_resolution;
 
   // ── Debug modes ──

@@ -22,6 +22,7 @@ const UNIFORM_NAMES = [
   "u_use_sdf_tex",
   "u_sdf_scale",
   "u_debug",
+  "u_strength",
   "u_fill_color",
   "u_fill_opacity",
 ] as const;
@@ -247,6 +248,7 @@ export class GlaciasEngine {
     gl.uniform1f(loc.u_sdf_scale!, sdfScale);
     gl.uniform1i(loc.u_sdf_tex!, 1);
     gl.uniform1i(loc.u_debug!, params.debug);
+    gl.uniform1f(loc.u_strength!, params.strength);
     gl.uniform3f(loc.u_fill_color!, params.fillColor[0], params.fillColor[1], params.fillColor[2]);
     gl.uniform1f(loc.u_fill_opacity!, params.fillOpacity);
 
