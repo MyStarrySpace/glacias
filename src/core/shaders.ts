@@ -27,6 +27,9 @@ uniform float u_falloff;      // 0..1  (0 = uniform, 1 = edges only)
 uniform int u_shape;          // 0=circle, 1=roundrect, 2=hex, 3=clover, 4=star
 uniform sampler2D u_bg;
 uniform vec4 u_bg_rect;       // (x, y, w, h) normalized rect within bg texture
+uniform sampler2D u_sdf_tex;  // custom SDF texture (0.5 = edge)
+uniform int u_use_sdf_tex;    // 0 = built-in SDF, 1 = texture SDF
+uniform float u_sdf_scale;    // converts texture value to pixel distance
 
 // ── Simplex-style noise (2D) ──
 vec3 mod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
@@ -167,7 +170,28 @@ void main() {
   vec2 delta = pixel - mousePixel;
   float radiusPx = u_radius;
 
-  float d = shapeSDF(delta, radiusPx, u_shape);
+  // ── SDF: built-in shape or custom texture ──
+  float d;
+  vec2 surfNormal;
+
+  if (u_use_sdf_tex == 1) {
+    // Sample distance field texture
+    float texVal = texture(u_sdf_tex, uv).r;
+    d = (texVal - 0.5) * u_sdf_scale;
+
+    // Normal from texture gradient (central differences)
+    vec2 eps = 2.0 / u_resolution;
+    float dR = texture(u_sdf_tex, uv + vec2(eps.x, 0.0)).r;
+    float dL = texture(u_sdf_tex, uv - vec2(eps.x, 0.0)).r;
+    float dU = texture(u_sdf_tex, uv + vec2(0.0, eps.y)).r;
+    float dD = texture(u_sdf_tex, uv - vec2(0.0, eps.y)).r;
+    vec2 grad = vec2(dR - dL, dU - dD);
+    float gradLen = length(grad);
+    surfNormal = (gradLen > 0.001) ? grad / gradLen : vec2(0.0);
+  } else {
+    d = shapeSDF(delta, radiusPx, u_shape);
+    surfNormal = sdfNormal(delta, radiusPx, u_shape);
+  }
 
   // Outside the glass — just draw background
   if (d > 3.0) {
@@ -188,8 +212,7 @@ void main() {
   float inside = 1.0 - smoothstep(-1.0, 2.0, d);
   float distortMask = radialFalloff * inside;
 
-  // ── Surface normal → edge tangent (parallel to edge) ──
-  vec2 surfNormal = sdfNormal(delta, radiusPx, u_shape);
+  // ── Edge tangent (parallel to edge) ──
   vec2 edgeTangent = vec2(-surfNormal.y, surfNormal.x);
 
   // ── Animated noise ──

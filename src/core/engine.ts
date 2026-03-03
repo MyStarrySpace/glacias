@@ -18,6 +18,9 @@ const UNIFORM_NAMES = [
   "u_shape",
   "u_bg",
   "u_bg_rect",
+  "u_sdf_tex",
+  "u_use_sdf_tex",
+  "u_sdf_scale",
 ] as const;
 
 export class GlaciasEngine {
@@ -34,6 +37,11 @@ export class GlaciasEngine {
   private mouseTarget = { x: 0.5, y: 0.5 };
   private mouseSmooth = { x: 0.5, y: 0.5 };
   private mouseLerp: number;
+
+  private sdfTexture: WebGLTexture | null = null;
+  private useSdfTex = false;
+  private sdfScale = 0;
+  private sdfMaxDist = 0;
 
   private rafId: number | null = null;
   private startTime = 0;
@@ -105,6 +113,7 @@ export class GlaciasEngine {
     const { gl } = this;
     gl.deleteProgram(this.program);
     gl.deleteTexture(this.bgTexture);
+    if (this.sdfTexture) gl.deleteTexture(this.sdfTexture);
     gl.deleteBuffer(this.quadBuffer);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
@@ -124,6 +133,32 @@ export class GlaciasEngine {
 
   setBgRect(rect: [number, number, number, number]): void {
     this.bgRect = rect;
+  }
+
+  /** Upload a custom SDF texture for shape masking */
+  setSdfTexture(imageData: ImageData, maxInteriorDist: number): void {
+    const { gl } = this;
+    if (!this.sdfTexture) {
+      this.sdfTexture = gl.createTexture()!;
+    }
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.sdfTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.useSdfTex = true;
+    this.sdfMaxDist = maxInteriorDist;
+  }
+
+  clearSdfTexture(): void {
+    if (this.sdfTexture) {
+      this.gl.deleteTexture(this.sdfTexture);
+      this.sdfTexture = null;
+    }
+    this.useSdfTex = false;
   }
 
   /** Track DOM elements for automatic per-frame bgRect computation */
@@ -181,11 +216,19 @@ export class GlaciasEngine {
     this.mouseSmooth.x += (this.mouseTarget.x - this.mouseSmooth.x) * this.mouseLerp;
     this.mouseSmooth.y += (this.mouseTarget.y - this.mouseSmooth.y) * this.mouseLerp;
 
+    // Compute effective radius: use SDF max interior distance when texture is active
+    const avgCanvasSize = Math.sqrt(this.canvas.width * this.canvas.height);
+    const sdfTexSize = 256; // matches generateSdfTexture default
+    const effectiveRadius = this.useSdfTex
+      ? this.sdfMaxDist * (avgCanvasSize / sdfTexSize)
+      : params.radius * dpr;
+    const sdfScale = avgCanvasSize; // (texVal - 0.5) * sdfScale → pixel distance
+
     // Set uniforms
     gl.uniform2f(loc.u_resolution!, this.canvas.width, this.canvas.height);
     gl.uniform2f(loc.u_mouse!, this.mouseSmooth.x, this.mouseSmooth.y);
     gl.uniform1f(loc.u_time!, time * 0.001);
-    gl.uniform1f(loc.u_radius!, params.radius * dpr);
+    gl.uniform1f(loc.u_radius!, effectiveRadius);
     gl.uniform1f(loc.u_refraction!, params.refraction);
     gl.uniform1f(loc.u_chromatic!, params.chromatic);
     gl.uniform1f(loc.u_blur!, params.blur);
@@ -197,9 +240,16 @@ export class GlaciasEngine {
     gl.uniform1i(loc.u_shape!, SHAPE_INDEX[params.shape]);
     gl.uniform1i(loc.u_bg!, 0);
     gl.uniform4f(loc.u_bg_rect!, this.bgRect[0], this.bgRect[1], this.bgRect[2], this.bgRect[3]);
+    gl.uniform1i(loc.u_use_sdf_tex!, this.useSdfTex ? 1 : 0);
+    gl.uniform1f(loc.u_sdf_scale!, sdfScale);
+    gl.uniform1i(loc.u_sdf_tex!, 1);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.bgTexture);
+    if (this.sdfTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.sdfTexture);
+    }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 

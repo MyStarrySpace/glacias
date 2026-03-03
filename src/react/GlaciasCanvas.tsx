@@ -3,6 +3,7 @@
 import { useRef, useEffect, useCallback, useState, type RefObject } from "react";
 import type { GlassParams } from "../core/types";
 import { GlaciasEngine } from "../core/engine";
+import { generateSdfTexture } from "../core/sdf-texture";
 import { detectGlaciasCapability, shouldFallback } from "../core/detect";
 
 export interface GlaciasCanvasProps {
@@ -13,6 +14,8 @@ export interface GlaciasCanvasProps {
   containerRef?: RefObject<HTMLElement | null>;
   /** Ref to the label element (glass surface) */
   labelRef?: RefObject<HTMLElement | null>;
+  /** SVG path data (0–1 objectBoundingBox coords) for custom SDF shape */
+  shapePath?: string;
   className?: string;
   style?: React.CSSProperties;
   paused?: boolean;
@@ -25,6 +28,7 @@ export function GlaciasCanvas({
   bgRect,
   containerRef,
   labelRef,
+  shapePath,
   className,
   style,
   paused,
@@ -65,6 +69,11 @@ export function GlaciasCanvas({
         engine.setElements(containerRef.current, labelRef.current);
       }
 
+      if (shapePath) {
+        const { imageData, maxInteriorDist } = generateSdfTexture(shapePath);
+        engine.setSdfTexture(imageData, maxInteriorDist);
+      }
+
       engine.start();
     } catch {
       webglSupported.current = false;
@@ -94,6 +103,18 @@ export function GlaciasCanvas({
   useEffect(() => {
     if (bgRect) engineRef.current?.setBgRect(bgRect);
   }, [bgRect]);
+
+  // Sync custom SDF shape path
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (shapePath) {
+      const { imageData, maxInteriorDist } = generateSdfTexture(shapePath);
+      engine.setSdfTexture(imageData, maxInteriorDist);
+    } else {
+      engine.clearSdfTexture();
+    }
+  }, [shapePath]);
 
   // Auto-track DOM elements for per-frame bgRect
   useEffect(() => {
