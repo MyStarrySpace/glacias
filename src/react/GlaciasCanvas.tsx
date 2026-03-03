@@ -14,7 +14,15 @@ export interface GlaciasCanvasProps {
   containerRef?: RefObject<HTMLElement | null>;
   /** Ref to the label element (glass surface) */
   labelRef?: RefObject<HTMLElement | null>;
-  /** SVG path data (0–1 objectBoundingBox coords) for custom SDF shape */
+  /**
+   * SVG path data for custom SDF shape. Accepts 0–1 objectBoundingBox coords
+   * by default, or arbitrary coords with the `shapeViewBox` option in
+   * `generateSdfTexture`.
+   *
+   * **Tip:** If the glass shape edges appear pixelated, apply a CSS
+   * `clip-path` using the same path on the container element. The shader
+   * renders at canvas resolution, so a vector clip-path gives crisp edges.
+   */
   shapePath?: string;
   className?: string;
   style?: React.CSSProperties;
