@@ -184,7 +184,8 @@ void main() {
     d = (texVal - 0.5) * u_sdf_scale;
 
     // Normal from texture gradient (central differences)
-    vec2 eps = 2.0 / u_resolution;
+    // Use wide epsilon (≥2 SDF texels) to avoid 8-bit quantization banding
+    vec2 eps = max(4.0 / u_resolution, vec2(2.0 / 256.0));
     float dR = texture(u_sdf_tex, uv + vec2(eps.x, 0.0)).r;
     float dL = texture(u_sdf_tex, uv - vec2(eps.x, 0.0)).r;
     float dU = texture(u_sdf_tex, uv + vec2(0.0, eps.y)).r;
