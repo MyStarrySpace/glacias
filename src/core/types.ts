@@ -23,6 +23,8 @@ export interface GlassParams {
   falloff: number;
   /** Overall displacement multiplier (default 1.0) */
   strength?: number;
+  /** Anti-alias width in pixels at shape edge (0 = hard edge, default 1.5) */
+  antialias?: number;
   /** Fill tint color as [r, g, b] in 0–1 range */
   fillColor?: [number, number, number];
   /** Fill tint opacity 0–1 (0 = no tint, 1 = solid fill) */
@@ -62,6 +64,7 @@ export const DEFAULT_PARAMS: ResolvedGlassParams = {
   interior: 0.2,
   falloff: 1.0,
   strength: 1.0,
+  antialias: 1.5,
   fillColor: [0, 0, 0],
   fillOpacity: 0,
   debug: 0,
