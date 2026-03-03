@@ -18,6 +18,8 @@ export interface GlassParams {
   thickness: number;
   /** Interior distortion 0–1 */
   interior: number;
+  /** Center attenuation 0–1 (0 = uniform, 1 = edges only) */
+  falloff: number;
 }
 
 export interface GlaciasOptions {
@@ -46,4 +48,5 @@ export const DEFAULT_PARAMS: GlassParams = {
   edge: 0.55,
   thickness: 0.65,
   interior: 0.2,
+  falloff: 1.0,
 };

@@ -23,6 +23,7 @@ uniform float u_noise;        // 0..1
 uniform float u_edge;         // 0..1
 uniform float u_thickness;    // 0..1  (edge band width)
 uniform float u_interior;     // 0..1  (base distortion in center)
+uniform float u_falloff;      // 0..1  (0 = uniform, 1 = edges only)
 uniform int u_shape;          // 0=circle, 1=roundrect, 2=hex, 3=clover, 4=star
 uniform sampler2D u_bg;
 uniform vec4 u_bg_rect;       // (x, y, w, h) normalized rect within bg texture
@@ -178,11 +179,12 @@ void main() {
   float bandWidth = radiusPx * u_thickness;
   float edgeBand = smoothstep(-bandWidth, 0.0, d) * (1.0 - smoothstep(0.0, 3.0, d));
 
-  // ── Radial distortion mask (strong at edges, zero at center) ──
+  // ── Radial distortion mask ──
   float depth = clamp(-d / radiusPx, 0.0, 1.0);   // 0 at edge, 1 deep inside
   float edgeProximity = 1.0 - depth;                // 1 at edge, 0 at center
   float falloffExp = mix(3.0, 1.0, u_interior);     // u_interior widens the band
-  float radialFalloff = pow(edgeProximity, falloffExp);
+  float edgeFalloff = pow(edgeProximity, falloffExp);
+  float radialFalloff = mix(1.0, edgeFalloff, u_falloff); // 0 = uniform, 1 = edges only
   float inside = 1.0 - smoothstep(-1.0, 2.0, d);
   float distortMask = radialFalloff * inside;
 

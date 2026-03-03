@@ -14,6 +14,7 @@ const UNIFORM_NAMES = [
   "u_edge",
   "u_thickness",
   "u_interior",
+  "u_falloff",
   "u_shape",
   "u_bg",
   "u_bg_rect",
@@ -192,6 +193,7 @@ export class GlaciasEngine {
     gl.uniform1f(loc.u_edge!, params.edge);
     gl.uniform1f(loc.u_thickness!, params.thickness);
     gl.uniform1f(loc.u_interior!, params.interior);
+    gl.uniform1f(loc.u_falloff!, params.falloff);
     gl.uniform1i(loc.u_shape!, SHAPE_INDEX[params.shape]);
     gl.uniform1i(loc.u_bg!, 0);
     gl.uniform4f(loc.u_bg_rect!, this.bgRect[0], this.bgRect[1], this.bgRect[2], this.bgRect[3]);
