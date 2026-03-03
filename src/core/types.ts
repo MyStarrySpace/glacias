@@ -20,6 +20,8 @@ export interface GlassParams {
   interior: number;
   /** Center attenuation 0–1 (0 = uniform, 1 = edges only) */
   falloff: number;
+  /** Debug visualization: 0 = off, 1 = vector field, 2 = SDF heatmap */
+  debug: number;
 }
 
 export interface GlaciasOptions {
@@ -49,4 +51,5 @@ export const DEFAULT_PARAMS: GlassParams = {
   thickness: 0.65,
   interior: 0.2,
   falloff: 1.0,
+  debug: 0,
 };

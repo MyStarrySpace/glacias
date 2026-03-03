@@ -21,6 +21,7 @@ const UNIFORM_NAMES = [
   "u_sdf_tex",
   "u_use_sdf_tex",
   "u_sdf_scale",
+  "u_debug",
 ] as const;
 
 export class GlaciasEngine {
@@ -243,6 +244,7 @@ export class GlaciasEngine {
     gl.uniform1i(loc.u_use_sdf_tex!, this.useSdfTex ? 1 : 0);
     gl.uniform1f(loc.u_sdf_scale!, sdfScale);
     gl.uniform1i(loc.u_sdf_tex!, 1);
+    gl.uniform1i(loc.u_debug!, params.debug);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.bgTexture);

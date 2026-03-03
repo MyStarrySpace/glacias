@@ -30,6 +30,7 @@ uniform vec4 u_bg_rect;       // (x, y, w, h) normalized rect within bg texture
 uniform sampler2D u_sdf_tex;  // custom SDF texture (0.5 = edge)
 uniform int u_use_sdf_tex;    // 0 = built-in SDF, 1 = texture SDF
 uniform float u_sdf_scale;    // converts texture value to pixel distance
+uniform int u_debug;          // 0 = off, 1 = vector field, 2 = SDF heatmap
 
 // ── Simplex-style noise (2D) ──
 vec3 mod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
@@ -224,7 +225,112 @@ void main() {
 
   // ── Combine distortion ──
   float refractStrength = u_refraction * radiusPx * 2.0;
-  vec2 distortion = (edgeTangent * refractStrength * distortMask + noiseOffset * distortMask) / u_resolution;
+  vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution;
+  vec2 distortion = distortionPx / u_resolution;
+
+  // ── Debug modes ──
+  if (u_debug == 1) {
+    // Vector field: show displacement direction + magnitude on a grid
+    vec3 bg = texture(u_bg, toBgUV(uv)).rgb * 0.3; // dim background
+    float gridSize = 24.0; // pixels per cell
+    vec2 cellId = floor(pixel / gridSize);
+    vec2 cellCenter = (cellId + 0.5) * gridSize;
+    vec2 localP = pixel - cellCenter; // pixel relative to cell center
+
+    // Compute distortion at cell center
+    vec2 cellUV = cellCenter / u_resolution;
+    float cellD;
+    vec2 cellNormal;
+    if (u_use_sdf_tex == 1) {
+      float tv = texture(u_sdf_tex, cellUV).r;
+      cellD = (tv - 0.5) * u_sdf_scale;
+      vec2 ceps = 2.0 / u_resolution;
+      float cR = texture(u_sdf_tex, cellUV + vec2(ceps.x, 0.0)).r;
+      float cL = texture(u_sdf_tex, cellUV - vec2(ceps.x, 0.0)).r;
+      float cU = texture(u_sdf_tex, cellUV + vec2(0.0, ceps.y)).r;
+      float cD = texture(u_sdf_tex, cellUV - vec2(0.0, ceps.y)).r;
+      vec2 cg = vec2(cR - cL, cU - cD);
+      float cgl = length(cg);
+      cellNormal = (cgl > 0.001) ? cg / cgl : vec2(0.0);
+    } else {
+      vec2 cellDelta = cellCenter - mousePixel;
+      cellD = shapeSDF(cellDelta, radiusPx, u_shape);
+      cellNormal = sdfNormal(cellDelta, radiusPx, u_shape);
+    }
+
+    float cellDepth = clamp(-cellD / radiusPx, 0.0, 1.0);
+    float cellEdgeProx = 1.0 - cellDepth;
+    float cellEdgeFalloff = pow(cellEdgeProx, falloffExp);
+    float cellRadialFalloff = mix(1.0, cellEdgeFalloff, u_falloff);
+    float cellInside = 1.0 - smoothstep(-1.0, 2.0, cellD);
+    float cellMask = cellRadialFalloff * cellInside;
+    vec2 cellTangent = vec2(-cellNormal.y, cellNormal.x);
+    vec2 cellVec = cellTangent * refractStrength * cellMask;
+
+    // Draw arrow: line from center in direction of cellVec
+    float mag = length(cellVec);
+    float maxArrow = gridSize * 0.45;
+    float arrowLen = min(mag * 0.15, maxArrow); // scale down for visibility
+    vec2 arrowDir = (mag > 0.01) ? cellVec / mag : vec2(0.0);
+    vec2 arrowEnd = arrowDir * arrowLen;
+
+    // Distance from point to line segment (center → arrowEnd)
+    float lineT = clamp(dot(localP, arrowDir), 0.0, arrowLen);
+    vec2 closest = arrowDir * lineT;
+    float lineDist = length(localP - closest);
+
+    // Arrow tip
+    vec2 tipP = localP - arrowEnd;
+    vec2 tipPerp = vec2(-arrowDir.y, arrowDir.x);
+    float tipAlong = -dot(tipP, arrowDir);
+    float tipAcross = abs(dot(tipP, tipPerp));
+    float tipShape = tipAcross - tipAlong * 0.6;
+    bool inTip = tipAlong > 0.0 && tipAlong < 5.0 && tipShape < 0.0;
+
+    // Dot at center
+    float dotDist = length(localP);
+
+    // Color by direction: red = +x, green = +y, blue = -x, yellow = -y
+    vec3 vecColor = vec3(
+      max(arrowDir.x, 0.0) + max(-arrowDir.y, 0.0) * 0.5,
+      max(arrowDir.y, 0.0) + max(-arrowDir.x, 0.0) * 0.3,
+      max(-arrowDir.x, 0.0) * 0.8
+    );
+    vecColor = mix(vec3(0.4), vecColor, clamp(mag * 0.01, 0.0, 1.0));
+
+    vec3 debugCol = bg;
+    // Draw line
+    if (lineDist < 1.2 && arrowLen > 0.5) debugCol = vecColor;
+    // Draw tip
+    if (inTip && arrowLen > 2.0) debugCol = vecColor;
+    // Draw center dot
+    if (dotDist < 2.0) debugCol = vec3(1.0);
+    // Shape edge indicator
+    float edgeGlow = smoothstep(3.0, 0.0, abs(d));
+    debugCol = mix(debugCol, vec3(1.0, 0.3, 0.3), edgeGlow * 0.6);
+
+    fragColor = vec4(debugCol, 1.0);
+    return;
+  }
+
+  if (u_debug == 2) {
+    // SDF heatmap: blue = deep inside, white = edge, red = outside
+    float nd = clamp(d / radiusPx, -1.0, 1.0); // -1..+1
+    vec3 heatmap;
+    if (nd < 0.0) {
+      heatmap = mix(vec3(0.0, 0.2, 0.8), vec3(1.0), 1.0 + nd); // blue→white
+    } else {
+      heatmap = mix(vec3(1.0), vec3(0.9, 0.1, 0.1), nd);        // white→red
+    }
+    // Overlay contour lines every 20px
+    float contour = 1.0 - smoothstep(0.5, 1.5, abs(mod(d, 20.0)));
+    heatmap = mix(heatmap, vec3(0.0), contour * 0.4);
+    // Bright line at d=0 (the edge)
+    float zeroLine = 1.0 - smoothstep(0.0, 2.0, abs(d));
+    heatmap = mix(heatmap, vec3(1.0, 1.0, 0.0), zeroLine * 0.8);
+    fragColor = vec4(heatmap, 1.0);
+    return;
+  }
 
   // Chromatic aberration
   float chromaStrength = u_chromatic * 0.6;
