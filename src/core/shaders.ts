@@ -230,12 +230,11 @@ void main() {
 
   // ── Debug modes ──
   if (u_debug == 1) {
-    // Vector field: show displacement direction + magnitude on a grid
-    vec3 bg = texture(u_bg, toBgUV(uv)).rgb * 0.3; // dim background
-    float gridSize = 24.0; // pixels per cell
+    // Vector field: displacement direction + magnitude on a grid
+    float gridSize = 36.0;
     vec2 cellId = floor(pixel / gridSize);
     vec2 cellCenter = (cellId + 0.5) * gridSize;
-    vec2 localP = pixel - cellCenter; // pixel relative to cell center
+    vec2 localP = pixel - cellCenter;
 
     // Compute distortion at cell center
     vec2 cellUV = cellCenter / u_resolution;
@@ -248,8 +247,8 @@ void main() {
       float cR = texture(u_sdf_tex, cellUV + vec2(ceps.x, 0.0)).r;
       float cL = texture(u_sdf_tex, cellUV - vec2(ceps.x, 0.0)).r;
       float cU = texture(u_sdf_tex, cellUV + vec2(0.0, ceps.y)).r;
-      float cD = texture(u_sdf_tex, cellUV - vec2(0.0, ceps.y)).r;
-      vec2 cg = vec2(cR - cL, cU - cD);
+      float cD_t = texture(u_sdf_tex, cellUV - vec2(0.0, ceps.y)).r;
+      vec2 cg = vec2(cR - cL, cU - cD_t);
       float cgl = length(cg);
       cellNormal = (cgl > 0.001) ? cg / cgl : vec2(0.0);
     } else {
@@ -265,49 +264,59 @@ void main() {
     float cellInside = 1.0 - smoothstep(-1.0, 2.0, cellD);
     float cellMask = cellRadialFalloff * cellInside;
     vec2 cellTangent = vec2(-cellNormal.y, cellNormal.x);
-    vec2 cellVec = cellTangent * refractStrength * cellMask;
 
-    // Draw arrow: line from center in direction of cellVec
-    float mag = length(cellVec);
-    float maxArrow = gridSize * 0.45;
-    float arrowLen = min(mag * 0.15, maxArrow); // scale down for visibility
-    vec2 arrowDir = (mag > 0.01) ? cellVec / mag : vec2(0.0);
-    vec2 arrowEnd = arrowDir * arrowLen;
+    // Magnitude: normalized 0..1 relative to max possible (refractStrength)
+    float magNorm = cellMask; // distortMask IS the magnitude factor (0..1)
+    float maxArrow = gridSize * 0.42;
+    float arrowLen = magNorm * maxArrow;
+    vec2 arrowDir = cellTangent;
 
-    // Distance from point to line segment (center → arrowEnd)
-    float lineT = clamp(dot(localP, arrowDir), 0.0, arrowLen);
-    vec2 closest = arrowDir * lineT;
-    float lineDist = length(localP - closest);
+    // ── Background: magnitude heatmap under arrows ──
+    // Per-pixel distortMask for smooth background coloring
+    float bgMask = distortMask;
+    vec3 bgHeat = mix(vec3(0.12, 0.1, 0.18), vec3(0.15, 0.55, 0.15), bgMask);
+    // Outside shape: dark
+    bgHeat = mix(vec3(0.06, 0.05, 0.08), bgHeat, inside);
 
-    // Arrow tip
-    vec2 tipP = localP - arrowEnd;
-    vec2 tipPerp = vec2(-arrowDir.y, arrowDir.x);
+    // ── Draw arrow ──
+    // Line from center toward arrowDir
+    float projOnLine = dot(localP, arrowDir);
+    float projPerp = abs(dot(localP, vec2(-arrowDir.y, arrowDir.x)));
+    float lineW = 1.4;
+
+    bool onLine = projOnLine > 0.0 && projOnLine < arrowLen && projPerp < lineW;
+
+    // Arrowhead triangle at tip
+    float headSize = max(4.0, arrowLen * 0.3);
+    vec2 tipP = localP - arrowDir * arrowLen;
     float tipAlong = -dot(tipP, arrowDir);
-    float tipAcross = abs(dot(tipP, tipPerp));
-    float tipShape = tipAcross - tipAlong * 0.6;
-    bool inTip = tipAlong > 0.0 && tipAlong < 5.0 && tipShape < 0.0;
+    float tipAcross = abs(dot(tipP, vec2(-arrowDir.y, arrowDir.x)));
+    bool onHead = tipAlong > 0.0 && tipAlong < headSize && tipAcross < tipAlong * 0.55;
 
-    // Dot at center
-    float dotDist = length(localP);
+    // Center dot
+    float dotR = length(localP);
 
-    // Color by direction: red = +x, green = +y, blue = -x, yellow = -y
-    vec3 vecColor = vec3(
-      max(arrowDir.x, 0.0) + max(-arrowDir.y, 0.0) * 0.5,
-      max(arrowDir.y, 0.0) + max(-arrowDir.x, 0.0) * 0.3,
-      max(-arrowDir.x, 0.0) * 0.8
-    );
-    vecColor = mix(vec3(0.4), vecColor, clamp(mag * 0.01, 0.0, 1.0));
+    // Color: hue encodes direction angle, brightness encodes magnitude
+    float angle = atan(arrowDir.y, arrowDir.x); // -PI..PI
+    // HSV-like: map angle to RGB
+    float hue = angle / 6.2831853 + 0.5; // 0..1
+    vec3 hueCol = clamp(vec3(
+      abs(hue * 6.0 - 3.0) - 1.0,
+      2.0 - abs(hue * 6.0 - 2.0),
+      2.0 - abs(hue * 6.0 - 4.0)
+    ), 0.0, 1.0);
+    // Brightness from magnitude
+    float brightness = 0.35 + 0.65 * magNorm;
+    vec3 vecColor = hueCol * brightness;
 
-    vec3 debugCol = bg;
-    // Draw line
-    if (lineDist < 1.2 && arrowLen > 0.5) debugCol = vecColor;
-    // Draw tip
-    if (inTip && arrowLen > 2.0) debugCol = vecColor;
-    // Draw center dot
-    if (dotDist < 2.0) debugCol = vec3(1.0);
-    // Shape edge indicator
-    float edgeGlow = smoothstep(3.0, 0.0, abs(d));
-    debugCol = mix(debugCol, vec3(1.0, 0.3, 0.3), edgeGlow * 0.6);
+    vec3 debugCol = bgHeat;
+    if (onLine && arrowLen > 1.0) debugCol = vecColor;
+    if (onHead && arrowLen > 3.0) debugCol = vecColor * 1.2;
+    if (dotR < 1.8) debugCol = vec3(0.7);
+
+    // Shape edge: bright yellow line
+    float edgeLine = smoothstep(2.5, 0.0, abs(d));
+    debugCol = mix(debugCol, vec3(1.0, 0.9, 0.2), edgeLine * 0.85);
 
     fragColor = vec4(debugCol, 1.0);
     return;
