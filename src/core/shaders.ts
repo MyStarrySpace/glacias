@@ -240,8 +240,8 @@ void main() {
 
   vec3 color = vec3(r, g, b);
 
-  // ── DEBUG: red edge glow ──
-  float debugBand = smoothstep(-radiusPx * 0.05, 0.0, d) * (1.0 - smoothstep(0.0, 8.0, d));
+  // ── DEBUG: red edge glow (absolute 20px band inside edge) ──
+  float debugBand = smoothstep(-20.0, 0.0, d) * (1.0 - smoothstep(0.0, 8.0, d));
   color = mix(color, vec3(1.0, 0.0, 0.0), debugBand * 0.8);
 
   // ── Edge highlight (Fresnel glow) ──
