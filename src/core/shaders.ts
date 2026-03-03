@@ -228,8 +228,9 @@ void main() {
 
   // ── Combine distortion ──
   // Max displacement in pixels: refraction 1.0 → 50px, multiplied by strength
-  float refractStrength = u_refraction * 50.0 * u_strength;
-  vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution * u_strength;
+  float str = u_strength;
+  float refractStrength = u_refraction * 50.0 * str;
+  vec2 distortionPx = edgeTangent * refractStrength * distortMask + noiseOffset * distortMask * u_resolution * str;
   vec2 distortion = distortionPx / u_resolution;
 
   // ── Debug modes ──
@@ -346,13 +347,13 @@ void main() {
   }
 
   // Chromatic aberration
-  float chromaStrength = u_chromatic * 0.6;
+  float chromaStrength = u_chromatic * 0.6 * str;
   vec2 rUV = uv + distortion * (1.0 + chromaStrength);
   vec2 gUV = uv + distortion;
   vec2 bUV = uv + distortion * (1.0 - chromaStrength);
 
   // Blur
-  float blurAmount = u_blur * 10.0 * distortMask;
+  float blurAmount = u_blur * 10.0 * distortMask * str;
   float r = sampleBlur(u_bg, rUV, blurAmount).r;
   float g = sampleBlur(u_bg, gUV, blurAmount).g;
   float b = sampleBlur(u_bg, bUV, blurAmount).b;
