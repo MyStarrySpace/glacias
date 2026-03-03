@@ -17,9 +17,9 @@ export interface GlassParams {
   edge: number;
   /** Edge highlight band width 0–1 (fraction of radius for Fresnel/specular) */
   thickness?: number;
-  /** Interior distortion breadth 0–1 (widens the active distortion band inward) */
+  /** Interior distortion breadth 0–1 */
   interior: number;
-  /** Center attenuation 0–1 (0 = uniform distortion, 1 = edges only) */
+  /** Falloff curve 0–1 (0 = gentle spread into interior, 1 = steep edge-only) */
   falloff: number;
   /** Overall displacement multiplier (default 1.0) */
   strength?: number;

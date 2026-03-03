@@ -208,11 +208,14 @@ void main() {
   float edgeBand = smoothstep(-bandWidth, 0.0, d) * (1.0 - smoothstep(0.0, 3.0, d));
 
   // ── Radial distortion mask ──
+  // Always 1.0 at edge, always 0.0 at center.
+  // falloff controls the curve shape between them:
+  //   low  (→0) = gentle slope, effect spreads deep into interior
+  //   high (→1) = steep, effect concentrated at edges only
   float depth = clamp(-d / radiusPx, 0.0, 1.0);   // 0 at edge, 1 deep inside
   float edgeProximity = 1.0 - depth;                // 1 at edge, 0 at center
-  float falloffExp = mix(3.0, 1.0, u_interior);     // u_interior widens the band
-  float edgeFalloff = pow(edgeProximity, falloffExp);
-  float radialFalloff = mix(1.0, edgeFalloff, u_falloff); // 0 = uniform, 1 = edges only
+  float curveExp = mix(0.3, 5.0, u_falloff);
+  float radialFalloff = pow(edgeProximity, curveExp);
   float inside = 1.0 - smoothstep(-1.0, 2.0, d);
   float distortMask = radialFalloff * inside;
 
@@ -264,8 +267,7 @@ void main() {
 
     float cellDepth = clamp(-cellD / radiusPx, 0.0, 1.0);
     float cellEdgeProx = 1.0 - cellDepth;
-    float cellEdgeFalloff = pow(cellEdgeProx, falloffExp);
-    float cellRadialFalloff = mix(1.0, cellEdgeFalloff, u_falloff);
+    float cellRadialFalloff = pow(cellEdgeProx, curveExp);
     float cellInside = 1.0 - smoothstep(-1.0, 2.0, cellD);
     float cellMask = cellRadialFalloff * cellInside;
     vec2 cellTangent = vec2(-cellNormal.y, cellNormal.x);
