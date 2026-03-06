@@ -20,7 +20,10 @@ export interface SdfTextureOptions {
 }
 
 export interface SdfTextureResult {
-  imageData: ImageData;
+  /** Signed distances in texels (negative = inside, positive = outside, 0 = edge). Y-flipped for direct GL upload. */
+  data: Float32Array;
+  width: number;
+  height: number;
   /** Maximum interior distance in texels */
   maxInteriorDist: number;
 }
@@ -31,8 +34,8 @@ export function generateSdfTexture(
   height?: number,
 ): SdfTextureResult {
   // Support legacy (width, height) positional args and new options object
-  let w = 256;
-  let h = 256;
+  let w = 512;
+  let h = 512;
   let viewBox: [number, number, number, number] | undefined;
 
   if (typeof optionsOrWidth === "number") {
@@ -64,12 +67,17 @@ export function generateSdfTexture(
   ctx.fillStyle = "white";
   ctx.fill(path);
 
-  // 2. Extract binary mask (inside = 1)
+  // 2. Extract alpha and binary mask
+  //    The canvas produces anti-aliased edges (smooth alpha gradients).
+  //    We threshold at 50% coverage for the binary mask used by the EDT,
+  //    then correct boundary pixels with sub-pixel estimates from the alpha.
   const imgData = ctx.getImageData(0, 0, w, h);
   const n = w * h;
+  const alpha = new Float64Array(n);
   const inside = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
-    inside[i] = imgData.data[i * 4 + 3] > 128 ? 1 : 0;
+    alpha[i] = imgData.data[i * 4 + 3] / 255;
+    inside[i] = alpha[i] >= 0.5 ? 1 : 0;
   }
 
   // 3. Compute distance transforms
@@ -81,30 +89,40 @@ export function generateSdfTexture(
   const sqDistToInside = distanceTransform2D(inside, w, h);
   const sqDistToOutside = distanceTransform2D(outsideMask, w, h);
 
-  // 4. Build signed distance field and track max interior distance
+  // 4. Build signed distance field with sub-pixel correction at boundaries
   //    Convention: negative = inside, positive = outside, 0 = edge
-  const maxRange = Math.max(w, h) / 2;
+  //    Output is a Float32Array in GL order (Y-flipped) for direct R32F upload.
   let maxInteriorDist = 0;
 
-  const sdf = new ImageData(w, h);
+  const sdf = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    // Inside pixels: negative distance to nearest outside pixel (edge)
-    // Outside pixels: positive distance to nearest inside pixel (edge)
-    const dist = inside[i]
+    // EDT-based integer distance
+    const edtDist = inside[i]
       ? -Math.sqrt(sqDistToOutside[i])
       : Math.sqrt(sqDistToInside[i]);
 
-    if (inside[i] && -dist > maxInteriorDist) {
+    let dist: number;
+    const a = alpha[i];
+    if (a > 0.02 && a < 0.98) {
+      // Boundary pixel: the canvas alpha encodes sub-pixel coverage.
+      // alpha=1 → fully inside (edge ~0.5px away outside)
+      // alpha=0.5 → edge passes through pixel center
+      // alpha=0 → fully outside (edge ~0.5px away inside)
+      // Use this to estimate a sub-pixel signed distance.
+      dist = 0.5 - a;
+    } else {
+      dist = edtDist;
+    }
+
+    if (dist < 0 && -dist > maxInteriorDist) {
       maxInteriorDist = -dist;
     }
 
-    // Encode: 0.5 = edge, <0.5 = inside, >0.5 = outside
-    const normalized = Math.max(0, Math.min(1, 0.5 + dist / (2 * maxRange)));
-    const byte = Math.round(normalized * 255);
-    sdf.data[i * 4] = byte;
-    sdf.data[i * 4 + 1] = byte;
-    sdf.data[i * 4 + 2] = byte;
-    sdf.data[i * 4 + 3] = 255;
+    // Flip Y so the data is in GL order (bottom-to-top) for direct upload
+    const x = i % w;
+    const y = Math.floor(i / w);
+    const glIdx = (h - 1 - y) * w + x;
+    sdf[glIdx] = dist;
   }
 
   if (maxInteriorDist === 0) {
@@ -114,7 +132,7 @@ export function generateSdfTexture(
     );
   }
 
-  return { imageData: sdf, maxInteriorDist };
+  return { data: sdf, width: w, height: h, maxInteriorDist };
 }
 
 // ── Felzenszwalb & Huttenlocher distance transform ──────────────

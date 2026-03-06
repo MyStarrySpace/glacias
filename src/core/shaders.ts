@@ -35,6 +35,8 @@ uniform float u_strength;     // overall displacement multiplier
 uniform float u_antialias;   // edge smoothing width in pixels (0 = hard)
 uniform vec3 u_fill_color;    // tint RGB (0–1)
 uniform float u_fill_opacity; // tint opacity (0 = none, 1 = solid)
+uniform int u_transparent;    // 0 = opaque bg outside shape, 1 = alpha transparency
+uniform float u_edge_expand;  // pixels to expand glass region beyond SDF boundary
 
 // ── Simplex-style noise (2D) ──
 vec3 mod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
@@ -180,13 +182,12 @@ void main() {
   vec2 surfNormal;
 
   if (u_use_sdf_tex == 1) {
-    // Sample distance field texture
+    // Sample R32F distance field: raw signed distance in texels
     float texVal = texture(u_sdf_tex, uv).r;
-    d = (texVal - 0.5) * u_sdf_scale;
+    d = texVal * u_sdf_scale;
 
     // Normal from texture gradient (central differences)
-    // Use wide epsilon (≥2 SDF texels) to avoid 8-bit quantization banding
-    vec2 eps = max(4.0 / u_resolution, vec2(2.0 / 256.0));
+    vec2 eps = 2.0 / u_resolution;
     float dR = texture(u_sdf_tex, uv + vec2(eps.x, 0.0)).r;
     float dL = texture(u_sdf_tex, uv - vec2(eps.x, 0.0)).r;
     float dU = texture(u_sdf_tex, uv + vec2(0.0, eps.y)).r;
@@ -199,10 +200,17 @@ void main() {
     surfNormal = sdfNormal(delta, radiusPx, u_shape);
   }
 
-  // Outside the glass — just draw background
+  // Optionally expand glass region beyond the SDF boundary
   float aaWidth = max(u_antialias, 0.0);
+  d -= u_edge_expand;
+
+  // Outside the glass
   if (d > aaWidth + 1.0) {
-    fragColor = vec4(texture(u_bg, toBgUV(uv)).rgb, 1.0);
+    if (u_transparent == 1) {
+      fragColor = vec4(0.0, 0.0, 0.0, 0.0);
+    } else {
+      fragColor = vec4(texture(u_bg, toBgUV(uv)).rgb, 1.0);
+    }
     return;
   }
 
@@ -256,7 +264,7 @@ void main() {
     vec2 cellNormal;
     if (u_use_sdf_tex == 1) {
       float tv = texture(u_sdf_tex, cellUV).r;
-      cellD = (tv - 0.5) * u_sdf_scale;
+      cellD = tv * u_sdf_scale;
       vec2 ceps = 2.0 / u_resolution;
       float cR = texture(u_sdf_tex, cellUV + vec2(ceps.x, 0.0)).r;
       float cL = texture(u_sdf_tex, cellUV - vec2(ceps.x, 0.0)).r;
@@ -381,14 +389,17 @@ void main() {
   float innerShadow = smoothstep(0.0, radiusPx * 0.08, -d);
   color *= mix(0.88, 1.0, innerShadow);
 
-  // ── Fill tint ──
+  // ── Fill tint (use edgeAlpha so fill fades with the anti-aliased edge) ──
   if (u_fill_opacity > 0.0) {
-    color = mix(color, u_fill_color, u_fill_opacity * inside);
+    color = mix(color, u_fill_color, u_fill_opacity * edgeAlpha);
   }
 
-  // ── Anti-aliased edge blend ──
-  vec3 rawBg = texture(u_bg, toBgUV(uv)).rgb;
-  color = mix(rawBg, color, edgeAlpha);
-
-  fragColor = vec4(color, 1.0);
+  // ── Anti-aliased edge ──
+  if (u_transparent == 1) {
+    fragColor = vec4(color, edgeAlpha);
+  } else {
+    vec3 rawBg = texture(u_bg, toBgUV(uv)).rgb;
+    color = mix(rawBg, color, edgeAlpha);
+    fragColor = vec4(color, 1.0);
+  }
 }`;

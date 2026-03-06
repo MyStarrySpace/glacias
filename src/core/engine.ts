@@ -26,6 +26,8 @@ const UNIFORM_NAMES = [
   "u_antialias",
   "u_fill_color",
   "u_fill_opacity",
+  "u_transparent",
+  "u_edge_expand",
 ] as const;
 
 export class GlaciasEngine {
@@ -47,6 +49,8 @@ export class GlaciasEngine {
   private useSdfTex = false;
   private sdfScale = 0;
   private sdfMaxDist = 0;
+  private sdfTexW = 0;
+  private sdfTexH = 0;
 
   private rafId: number | null = null;
   private startTime = 0;
@@ -140,22 +144,27 @@ export class GlaciasEngine {
     this.bgRect = rect;
   }
 
-  /** Upload a custom SDF texture for shape masking */
-  setSdfTexture(imageData: ImageData, maxInteriorDist: number): void {
+  /** Upload a custom SDF texture for shape masking (R32F float texture) */
+  setSdfTexture(data: Float32Array, width: number, height: number, maxInteriorDist: number): void {
     const { gl } = this;
+    // Enable linear filtering on float textures (widely supported in WebGL2)
+    gl.getExtension("OES_texture_float_linear");
     if (!this.sdfTexture) {
       this.sdfTexture = gl.createTexture()!;
     }
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.sdfTexture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+    // Data is already Y-flipped by generateSdfTexture, no FLIP_Y needed
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, width, height, 0, gl.RED, gl.FLOAT, data);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.useSdfTex = true;
     this.sdfMaxDist = maxInteriorDist;
+    this.sdfTexW = width;
+    this.sdfTexH = height;
   }
 
   clearSdfTexture(): void {
@@ -223,11 +232,12 @@ export class GlaciasEngine {
 
     // Compute effective radius: use SDF max interior distance when texture is active
     const avgCanvasSize = Math.sqrt(this.canvas.width * this.canvas.height);
-    const sdfTexSize = 256; // matches generateSdfTexture default
+    const sdfTexSize = Math.max(this.sdfTexW, this.sdfTexH) || 512;
     const effectiveRadius = this.useSdfTex
       ? this.sdfMaxDist * (avgCanvasSize / sdfTexSize)
       : params.radius * dpr;
-    const sdfScale = avgCanvasSize; // (texVal - 0.5) * sdfScale → pixel distance
+    // R32F texture stores raw texel distances; scale converts texels → screen pixels
+    const sdfScale = avgCanvasSize / sdfTexSize;
 
     // Set uniforms
     gl.uniform2f(loc.u_resolution!, this.canvas.width, this.canvas.height);
@@ -253,6 +263,8 @@ export class GlaciasEngine {
     gl.uniform1f(loc.u_antialias!, params.antialias);
     gl.uniform3f(loc.u_fill_color!, params.fillColor[0], params.fillColor[1], params.fillColor[2]);
     gl.uniform1f(loc.u_fill_opacity!, params.fillOpacity);
+    gl.uniform1i(loc.u_transparent!, params.transparent ? 1 : 0);
+    gl.uniform1f(loc.u_edge_expand!, params.edgeExpand);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.bgTexture);

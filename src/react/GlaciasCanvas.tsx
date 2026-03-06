@@ -19,9 +19,9 @@ export interface GlaciasCanvasProps {
    * by default, or arbitrary coords with the `shapeViewBox` option in
    * `generateSdfTexture`.
    *
-   * **Tip:** If the glass shape edges appear pixelated, apply a CSS
-   * `clip-path` using the same path on the container element. The shader
-   * renders at canvas resolution, so a vector clip-path gives crisp edges.
+   * **Tip:** Set `transparent: true` in params to get anti-aliased edges
+   * via alpha transparency, avoiding the jagged edges that CSS `clip-path`
+   * produces.
    */
   shapePath?: string;
   className?: string;
@@ -78,8 +78,8 @@ export function GlaciasCanvas({
       }
 
       if (shapePath) {
-        const { imageData, maxInteriorDist } = generateSdfTexture(shapePath);
-        engine.setSdfTexture(imageData, maxInteriorDist);
+        const { data, width, height, maxInteriorDist } = generateSdfTexture(shapePath);
+        engine.setSdfTexture(data, width, height, maxInteriorDist);
       }
 
       engine.start();
@@ -117,8 +117,8 @@ export function GlaciasCanvas({
     const engine = engineRef.current;
     if (!engine) return;
     if (shapePath) {
-      const { imageData, maxInteriorDist } = generateSdfTexture(shapePath);
-      engine.setSdfTexture(imageData, maxInteriorDist);
+      const { data, width, height, maxInteriorDist } = generateSdfTexture(shapePath);
+      engine.setSdfTexture(data, width, height, maxInteriorDist);
     } else {
       engine.clearSdfTexture();
     }
